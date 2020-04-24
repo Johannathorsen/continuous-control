@@ -9,15 +9,17 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-BUFFER_SIZE = int(1e5)  # replay buffer size
+BUFFER_SIZE = int(1e6)  # replay buffer size
 BATCH_SIZE = 128        # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
-LR_ACTOR = 1e-4         # learning rate of the actor 
+LR_ACTOR = 1e-3         # learning rate of the actor 
 LR_CRITIC = 1e-3        # learning rate of the critic
 WEIGHT_DECAY = 0        # L2 weight decay
 UPDATE_FREQUENCY = 20   # update networks every nth timestep
 UPDATE_TIMES = 10       # how many times we update the networks at each update
+EPSILON = 1.0           # noise factor
+EPSILON_DECAY = 1e-6    # epsilon decay
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -50,6 +52,7 @@ class Agent():
 
         # Noise process
         self.noise = OUNoise(action_size, random_seed)
+        self.epsilon = EPSILON
 
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
@@ -73,7 +76,7 @@ class Agent():
             action = self.actor_local(state).cpu().data.numpy()
         self.actor_local.train()
         if add_noise:
-            action += self.noise.sample()
+            action += self.noise.sample() * self.epsilon
         return np.clip(action, -1, 1)
 
     def reset(self):
@@ -115,6 +118,9 @@ class Agent():
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
+        # update epsilon
+        self.epsilon -= EPSILON_DECAY
+        self.reset()
 
         # ----------------------- update target networks ----------------------- #
         self.soft_update(self.critic_local, self.critic_target, TAU)
